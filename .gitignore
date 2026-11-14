@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+uploads/
+credentials.json
+*-credentials.json
+*.pem
+.DS_Store
+data/*.db
