@@ -53,23 +53,54 @@ class SheetsNotConfigured(RuntimeError):
     pass
 
 
+def _normalize_sa_info(info: dict) -> dict:
+    """Corrige private_key si Render dejó los \\n literales o comillas de más."""
+    out = dict(info)
+    pk = out.get("private_key")
+    if isinstance(pk, str):
+        pk = pk.strip().strip('"').strip("'")
+        if "\\n" in pk and "\n-----" not in pk:
+            pk = pk.replace("\\n", "\n")
+        out["private_key"] = pk
+    return out
+
+
+def _load_sa_json(raw: str) -> dict:
+    raw = raw.strip().strip("'").strip('"')
+    # Base64 del JSON completo (más fiable en variables de Render)
+    if not raw.startswith("{") and not raw.startswith("/"):
+        try:
+            import base64
+
+            decoded = base64.b64decode(raw).decode("utf-8")
+            if decoded.strip().startswith("{"):
+                return _normalize_sa_info(json.loads(decoded))
+        except Exception:
+            pass
+    if raw.startswith("{"):
+        return _normalize_sa_info(json.loads(raw))
+    path = Path(raw)
+    if path.is_file():
+        return _normalize_sa_info(json.loads(path.read_text(encoding="utf-8")))
+    raise SheetsNotConfigured("GOOGLE_SERVICE_ACCOUNT_JSON no es un JSON válido.")
+
+
 def _credentials_dict() -> dict:
     raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     if raw:
-        if raw.startswith("{"):
-            return json.loads(raw)
-        path = Path(raw)
-        if path.is_file():
-            return json.loads(path.read_text(encoding="utf-8"))
+        return _load_sa_json(raw)
+    b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_B64", "").strip()
+    if b64:
+        return _load_sa_json(b64)
     file_env = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     if file_env and Path(file_env).is_file():
-        return json.loads(Path(file_env).read_text(encoding="utf-8"))
+        return _normalize_sa_info(json.loads(Path(file_env).read_text(encoding="utf-8")))
     local = Path(__file__).resolve().parent.parent / "credentials.json"
     if local.is_file():
-        return json.loads(local.read_text(encoding="utf-8"))
+        return _normalize_sa_info(json.loads(local.read_text(encoding="utf-8")))
     raise SheetsNotConfigured(
         "Faltan credenciales de Google. Define GOOGLE_SERVICE_ACCOUNT_JSON "
-        "o coloca credentials.json en web/backend/."
+        "(JSON en una línea o base64) o credentials.json en el backend."
     )
 
 
